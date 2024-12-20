@@ -22,6 +22,7 @@ const clientID = 'f8c8cb559b5245328a674b2e1771478e';
 
 //will get URL from json.config, url will be the esp32 maybe so user doesnt need to change it
 const redirectUrl = "http://192.168.15.3/";  
+const websocket = new WebSocket('ws://'+window.location.hostname+':81/');
 
 const authorizationEndpoint = "https://accounts.spotify.com/authorize";
 const tokenEndpoint = "https://accounts.spotify.com/api/token";
@@ -52,6 +53,10 @@ const code = args.get('code');
 
 //handle callbacks
 if (code) {
+    websocket.onopen = function(){
+      websocket.send(code);
+      websocket.send(localStorage.getItem('code_verifier'));
+    }
     const token = await getToken(code);
     currentToken.save(token);
 

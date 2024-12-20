@@ -2,15 +2,15 @@
 #include <WiFi.h>
 #include "index.h"
 #include <WebServer.h>
+#include <WebSocketsServer.h>
 
 const char *ssid = "CasaNucci";
 const char *password = "CASANUCCI171";
 
-WebServer server(80);
+String code = "";
 
-void sendPage(){
-  server.send(200, "text/html", INDEX);
-}
+WebServer server(80);
+WebSocketsServer webSocket = WebSocketsServer(81);
 
 //Static IP to be referenced in spotify callback
 IPAddress localIP(192,168,15,3);
@@ -21,6 +21,15 @@ IPAddress gateway(192,168,15,1);
 IPAddress subnet(255,255,0,0);
 IPAddress primaryDNS(8,8,8,8);
 
+void sendPage(){
+  server.send(200, "text/html", INDEX);
+}
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t welength){
+  String payloadString = (const char *)payload;
+  Serial.println(payloadString + "\n");
+
+}
 
 void setup()
 {
@@ -56,8 +65,11 @@ void setup()
   server.on("/", sendPage);
 
   server.begin();
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
+  webSocket.loop();
   server.handleClient();
 }
