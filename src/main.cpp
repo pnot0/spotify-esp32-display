@@ -6,6 +6,7 @@
 
 const char *ssid = "CasaNucci";
 const char *password = "CASANUCCI171";
+String codes[2];
 
 String code = "";
 
@@ -26,9 +27,17 @@ void sendPage(){
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t welength){
-  String payloadString = (const char *)payload;
-  Serial.println(payloadString + "\n");
-
+  if(type == WStype_TEXT){
+      String payloadString = (const char *)payload;
+      if(payloadString[0] == '0'){
+        payloadString.remove(0,1);
+        Serial.println("this is the code "+ payloadString + "\n");
+      }else{
+        Serial.println("this is the verifier "+ payloadString);
+      }
+  }
+  
+  //This gets the code verifier and code, the basis for the token
 }
 
 void setup()

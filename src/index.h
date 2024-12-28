@@ -54,7 +54,7 @@ const code = args.get('code');
 //handle callbacks
 if (code) {
     websocket.onopen = function(){
-      websocket.send(code);
+      websocket.send('0'+code);
       websocket.send(localStorage.getItem('code_verifier'));
     }
     const token = await getToken(code);
