@@ -1,14 +1,25 @@
 
 #include <WiFi.h>
-#include "index.h"
+#include <ArduinoJson.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <HTTPClient.h>
 
-const char *ssid = "CasaNucci";
-const char *password = "CASANUCCI171";
-String codes[2];
+#include "index.h"
+#include "secrets.h"
 
-String code = "";
+//const char *ssid = "your ssid";
+//const char *password = "your pass";
+
+String clientID = "f8c8cb559b5245328a674b2e1771478e";
+
+String code;
+String codeVerifier;
+
+String acessToken;
+String refreshToken;
+String expiresIn;
+String expires;
 
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -22,6 +33,8 @@ IPAddress gateway(192,168,15,1);
 IPAddress subnet(255,255,0,0);
 IPAddress primaryDNS(8,8,8,8);
 
+String redirectUrl = "http%3A%2F%2F192.168.15.3%2F";
+
 void sendPage(){
   server.send(200, "text/html", INDEX);
 }
@@ -31,9 +44,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t welengt
       String payloadString = (const char *)payload;
       if(payloadString[0] == '0'){
         payloadString.remove(0,1);
-        Serial.println("this is the code "+ payloadString + "\n");
+        code = payloadString;
       }else{
-        Serial.println("this is the verifier "+ payloadString);
+        codeVerifier = payloadString;
       }
   }
   
@@ -81,4 +94,31 @@ void setup()
 void loop() {
   webSocket.loop();
   server.handleClient();
+  if(!code.isEmpty() && !codeVerifier.isEmpty()){
+    //We have code, now to act
+    HTTPClient http;
+    //JsonDocument doc;
+       
+    http.begin("https://accounts.spotify.com/api/token");
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    /*
+    doc["client_id"] = clientID;
+    doc["grant_type"] = "authorization_code";
+    doc["code"] = code;
+    doc["redirect_uri"] = redirectUrl;
+    doc["code_verifier"] = codeVerifier;
+    */
+
+    delay(300);
+    String requestBody = "client_id=" + clientID + "&grant_type=authorization_code" + "&code=" + code + "&redirect_uri=" + redirectUrl + "&code_verifier=" + codeVerifier;
+
+    //Serial.println(requestBody);
+    int httpResponseCode = http.POST(requestBody);
+    if(httpResponseCode>0){
+      String response = http.getString();                       
+       
+      Serial.println(httpResponseCode);   
+      Serial.println(response);
+    }
+  }
 }
