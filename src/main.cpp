@@ -18,7 +18,6 @@ String codeVerifier;
 
 String acessToken;
 String refreshToken;
-String expiresIn;
 String expires;
 
 WebServer server(80);
@@ -91,28 +90,32 @@ void setup()
   webSocket.onEvent(webSocketEvent);
 }
 
+void getToken(){
+  HTTPClient http;
+      
+  http.begin("https://accounts.spotify.com/api/token");
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
+  delay(300);
+  String requestBody = "client_id=" + clientID + "&grant_type=authorization_code" + "&code=" + code + "&redirect_uri=" + redirectUrl + "&code_verifier=" + codeVerifier;
+
+  int httpResponseCode = http.POST(requestBody);
+  if(httpResponseCode>0 && httpResponseCode == 200){
+    const char* responseJson = http.getString().c_str();
+    JsonDocument jsonDoc;
+    deserializeJson(jsonDoc, responseJson);
+    acessToken = jsonDoc["access_token"].as<String>();
+    Serial.println("responde code: " + httpResponseCode);
+    Serial.println("token: " + jsonDoc["access_token"].as<String>());
+    Serial.println("refresh token: " + jsonDoc["refresh_token"].as<String>());
+    Serial.println("expiration: " + jsonDoc["expires_in"].as<String>());
+  }
+}
+
 void loop() {
   webSocket.loop();
   server.handleClient();
-  if(!code.isEmpty() && !codeVerifier.isEmpty()){
-    HTTPClient http;
-       
-    http.begin("https://accounts.spotify.com/api/token");
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-   
-    delay(300);
-    String requestBody = "client_id=" + clientID + "&grant_type=authorization_code" + "&code=" + code + "&redirect_uri=" + redirectUrl + "&code_verifier=" + codeVerifier;
-
-    int httpResponseCode = http.POST(requestBody);
-    if(httpResponseCode>0 && httpResponseCode == 200 && !token.isEmpty()){
-      const char* responseJson = http.getString().c_str();
-      JsonDocument jsonDoc;
-      deserializeJson(jsonDoc, responseJson);
-      String token = jsonDoc["access_token"].as<String>();
-      Serial.println("responde code: " + httpResponseCode);
-      Serial.println("token: " + jsonDoc["access_token"].as<String>());
-      Serial.println("refresh token: " + jsonDoc["refresh_token"].as<String>());
-      Serial.println("expiration: " + jsonDoc["expires_in"].as<String>());
-    }
+  if(!code.isEmpty() && !codeVerifier.isEmpty() && !acessToken.isEmpty()){
+    getToken();
   }
 }
