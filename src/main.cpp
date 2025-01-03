@@ -1,7 +1,7 @@
 
 #include <WiFi.h>
-#include <ArduinoJson.h>
 #include <WebServer.h>
+#include <ArduinoJson.h>
 #include <WebSocketsServer.h>
 #include <HTTPClient.h>
 
@@ -95,30 +95,24 @@ void loop() {
   webSocket.loop();
   server.handleClient();
   if(!code.isEmpty() && !codeVerifier.isEmpty()){
-    //We have code, now to act
     HTTPClient http;
-    //JsonDocument doc;
        
     http.begin("https://accounts.spotify.com/api/token");
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-    /*
-    doc["client_id"] = clientID;
-    doc["grant_type"] = "authorization_code";
-    doc["code"] = code;
-    doc["redirect_uri"] = redirectUrl;
-    doc["code_verifier"] = codeVerifier;
-    */
-
+   
     delay(300);
     String requestBody = "client_id=" + clientID + "&grant_type=authorization_code" + "&code=" + code + "&redirect_uri=" + redirectUrl + "&code_verifier=" + codeVerifier;
 
-    //Serial.println(requestBody);
     int httpResponseCode = http.POST(requestBody);
-    if(httpResponseCode>0){
-      String response = http.getString();                       
-       
-      Serial.println(httpResponseCode);   
-      Serial.println(response);
+    if(httpResponseCode>0 && httpResponseCode == 200 && !token.isEmpty()){
+      const char* responseJson = http.getString().c_str();
+      JsonDocument jsonDoc;
+      deserializeJson(jsonDoc, responseJson);
+      String token = jsonDoc["access_token"].as<String>();
+      Serial.println("responde code: " + httpResponseCode);
+      Serial.println("token: " + jsonDoc["access_token"].as<String>());
+      Serial.println("refresh token: " + jsonDoc["refresh_token"].as<String>());
+      Serial.println("expiration: " + jsonDoc["expires_in"].as<String>());
     }
   }
 }
