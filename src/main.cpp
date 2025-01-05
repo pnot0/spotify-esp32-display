@@ -8,10 +8,7 @@
 #include "index.h"
 #include "secrets.h"
 
-//const char *ssid = "your ssid";
-//const char *password = "your pass";
-
-String clientID = "f8c8cb559b5245328a674b2e1771478e";
+//need to fork for git a specific version to upload so it doesnt include private shit
 
 String code;
 String codeVerifier;
@@ -22,6 +19,7 @@ String expires;
 
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
+HTTPClient http;
 
 //Static IP to be referenced in spotify callback
 IPAddress localIP(192,168,15,3);
@@ -32,7 +30,7 @@ IPAddress gateway(192,168,15,1);
 IPAddress subnet(255,255,0,0);
 IPAddress primaryDNS(8,8,8,8);
 
-String redirectUrl = "http%3A%2F%2F192.168.15.3%2F";
+String redirectUrl = "http%3A%2F%2F"+localIP.toString()+"%2F";
 
 void sendPage(){
   server.send(200, "text/html", INDEX);
@@ -54,6 +52,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t welengt
 
 void setup()
 {
+
+
   Serial.begin(9600);
   pinMode(5, OUTPUT);  // set the LED pin mode
 
@@ -91,8 +91,6 @@ void setup()
 }
 
 void getToken(){
-  HTTPClient http;
-      
   http.begin("https://accounts.spotify.com/api/token");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
@@ -102,20 +100,36 @@ void getToken(){
   int httpResponseCode = http.POST(requestBody);
   if(httpResponseCode>0 && httpResponseCode == 200){
     const char* responseJson = http.getString().c_str();
-    JsonDocument jsonDoc;
-    deserializeJson(jsonDoc, responseJson);
-    acessToken = jsonDoc["access_token"].as<String>();
+    JsonDocument tokenDoc;
+    deserializeJson(tokenDoc, responseJson);
+    acessToken = tokenDoc["access_token"].as<String>();
     Serial.println("responde code: " + httpResponseCode);
-    Serial.println("token: " + jsonDoc["access_token"].as<String>());
-    Serial.println("refresh token: " + jsonDoc["refresh_token"].as<String>());
-    Serial.println("expiration: " + jsonDoc["expires_in"].as<String>());
+    Serial.println("token: " + tokenDoc["access_token"].as<String>());
+    Serial.println("refresh token: " + tokenDoc["refresh_token"].as<String>());
+    Serial.println("expiration: " + tokenDoc["expires_in"].as<String>());
+  }
+}
+
+void getCurrentTrack(String acessToken){
+  http.begin("https://api.spotify.com/v1/me/player/currently-playing");
+  http.addHeader("Authorization","Bearer " + acessToken);
+  int httpResponseCode = http.GET();
+  if(httpResponseCode>0 && httpResponseCode == 200){
+    const char* responseJson = http.getString().c_str();
+    JsonDocument currentTrackDoc;
+    deserializeJson(currentTrackDoc, responseJson);
+    Serial.println("current track: " + currentTrackDoc["item"]["name"].as<String>());
   }
 }
 
 void loop() {
   webSocket.loop();
   server.handleClient();
-  if(!code.isEmpty() && !codeVerifier.isEmpty() && !acessToken.isEmpty()){
+  if(!code.isEmpty() && !codeVerifier.isEmpty() && acessToken.isEmpty()){
     getToken();
+  }
+
+  if(!acessToken.isEmpty()){
+    getCurrentTrack(acessToken);
   }
 }

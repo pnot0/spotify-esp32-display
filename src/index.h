@@ -17,7 +17,7 @@ const char INDEX[] PROGMEM = R"=====(
     <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/build/sha256.min.js"></script>
     <script type="module">
     
-        //will get clientID of user created API from json.config
+//change this value with the current clientID
 const clientID = 'f8c8cb559b5245328a674b2e1771478e';
 
 //will get URL from json.config, url will be the esp32 maybe so user doesnt need to change it
