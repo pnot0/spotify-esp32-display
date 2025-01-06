@@ -1,17 +1,34 @@
 
+//essentials
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <WebSocketsServer.h>
 #include <HTTPClient.h>
 
+//user and webpage
 #include "index.h"
 #include "secrets.h"
+
+//graphics
+#include <TFT_eSPI.h> 
+#include <SPI.h>
 
 //need to fork for git a specific version to upload so it doesnt include private shit
 
 String code;
 String codeVerifier;
+
+String previousTrack;
+String currentTrack;
+
+String remainderProgressSeconds;
+String remainderDurationSeconds;
+
+int progressSeconds;
+int durationSeconds;
+int progressMinutes;
+int durationMinutes;
 
 String acessToken;
 String refreshToken;
@@ -20,6 +37,7 @@ String expires;
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
 HTTPClient http;
+TFT_eSPI tft = TFT_eSPI();
 
 //Static IP to be referenced in spotify callback
 IPAddress localIP(192,168,15,3);
@@ -52,10 +70,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t welengt
 
 void setup()
 {
-
-
   Serial.begin(9600);
-  pinMode(5, OUTPUT);  // set the LED pin mode
+  tft.init();
+  tft.setRotation(3);
+  tft.fillScreen(0x5AEB);
 
   delay(10);
 
@@ -83,6 +101,13 @@ void setup()
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 
+  tft.setCursor(0, 0, 2);
+  tft.setTextColor(TFT_WHITE,TFT_BLACK);  
+  tft.setTextSize(2);
+  tft.println("Enter the IP");
+  tft.println("and connect your Spotify:");
+  tft.println(WiFi.localIP().toString());
+
   server.on("/", sendPage);
 
   server.begin();
@@ -103,10 +128,19 @@ void getToken(){
     JsonDocument tokenDoc;
     deserializeJson(tokenDoc, responseJson);
     acessToken = tokenDoc["access_token"].as<String>();
-    Serial.println("responde code: " + httpResponseCode);
+    /*
     Serial.println("token: " + tokenDoc["access_token"].as<String>());
     Serial.println("refresh token: " + tokenDoc["refresh_token"].as<String>());
     Serial.println("expiration: " + tokenDoc["expires_in"].as<String>());
+    */
+  }
+}
+
+String formatRemainder(int x){
+  if(x % 60 < 10){
+    return "0" + String(x % 60);
+  }else{
+    return String(x % 60);
   }
 }
 
@@ -118,13 +152,35 @@ void getCurrentTrack(String acessToken){
     const char* responseJson = http.getString().c_str();
     JsonDocument currentTrackDoc;
     deserializeJson(currentTrackDoc, responseJson);
-    Serial.println("current track: " + currentTrackDoc["item"]["name"].as<String>());
+
+    currentTrack = currentTrackDoc["item"]["name"].as<String>();
+    progressSeconds = currentTrackDoc["progress_ms"].as<int>() / 1000;
+    durationSeconds = currentTrackDoc["item"]["duration_ms"].as<int>() / 1000;
+    progressMinutes = progressSeconds / 60;
+    durationMinutes = durationSeconds / 60;
+    remainderProgressSeconds = formatRemainder(progressSeconds);
+    remainderDurationSeconds = formatRemainder(durationSeconds);
+
+    if(currentTrack != previousTrack){
+      tft.setCursor(0, 0, 2);
+      tft.fillScreen(0x5AEB);
+      tft.println(currentTrack);
+      previousTrack = currentTrack;
+    }
+    tft.setCursor(0, 96, 2);
+    tft.println(String(progressMinutes) + ":" + remainderProgressSeconds);
+
+    tft.setCursor(64, 96, 2);
+    tft.println("/ "+String(durationMinutes) + ":" + remainderDurationSeconds);
+
+
   }
 }
 
 void loop() {
   webSocket.loop();
   server.handleClient();
+
   if(!code.isEmpty() && !codeVerifier.isEmpty() && acessToken.isEmpty()){
     getToken();
   }
