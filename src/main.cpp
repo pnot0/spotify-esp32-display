@@ -21,6 +21,7 @@ String codeVerifier;
 
 String previousTrack;
 String currentTrack;
+String currentArtist;
 
 String remainderProgressSeconds;
 String remainderDurationSeconds;
@@ -32,7 +33,8 @@ int durationMinutes;
 
 String acessToken;
 String refreshToken;
-String expires;
+int expires;
+unsigned long lastTime;
 
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -73,7 +75,9 @@ void setup()
   Serial.begin(9600);
   tft.init();
   tft.setRotation(3);
-  tft.fillScreen(0x5AEB);
+  tft.fillScreen(TFT_DARKCYAN);
+  tft.setTextColor(TFT_WHITE);  
+  tft.setTextSize(2);
 
   delay(10);
 
@@ -102,8 +106,6 @@ void setup()
   Serial.println(WiFi.localIP());
 
   tft.setCursor(0, 0, 2);
-  tft.setTextColor(TFT_WHITE,TFT_BLACK);  
-  tft.setTextSize(2);
   tft.println("Enter the IP");
   tft.println("and connect your Spotify:");
   tft.println(WiFi.localIP().toString());
@@ -128,11 +130,32 @@ void getToken(){
     JsonDocument tokenDoc;
     deserializeJson(tokenDoc, responseJson);
     acessToken = tokenDoc["access_token"].as<String>();
+    refreshToken = tokenDoc["refresh_token"].as<String>();
+    expires = tokenDoc["expires_in"].as<int>();
+
     /*
     Serial.println("token: " + tokenDoc["access_token"].as<String>());
     Serial.println("refresh token: " + tokenDoc["refresh_token"].as<String>());
     Serial.println("expiration: " + tokenDoc["expires_in"].as<String>());
     */
+  }
+}
+
+void getRefreshToken(String refreshToken){
+  http.begin("https://accounts.spotify.com/api/token");
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+  delay(300);
+  String requestBody = "client_id=" + clientID + "&grant_type=refresh_token" + "&refresh_token=" + refreshToken;
+
+  int httpResponseCode = http.POST(requestBody);
+  if(httpResponseCode>0 && httpResponseCode == 200){
+    const char* responseJson = http.getString().c_str();
+    JsonDocument tokenDoc;
+    deserializeJson(tokenDoc, responseJson);
+    acessToken = tokenDoc["access_token"].as<String>();
+    refreshToken = tokenDoc["refresh_token"].as<String>();
+    expires = tokenDoc["expires_in"].as<int>();
   }
 }
 
@@ -148,12 +171,22 @@ void getCurrentTrack(String acessToken){
   http.begin("https://api.spotify.com/v1/me/player/currently-playing");
   http.addHeader("Authorization","Bearer " + acessToken);
   int httpResponseCode = http.GET();
+  if(httpResponseCode>0 && httpResponseCode == 204){
+    tft.setTextColor(TFT_RED);
+    tft.setCursor(0,0,1);
+    tft.fillScreen(0x5AEB);
+    Serial.println("no track is playing");
+    tft.println("no track is playing");
+  }
+
   if(httpResponseCode>0 && httpResponseCode == 200){
     const char* responseJson = http.getString().c_str();
     JsonDocument currentTrackDoc;
     deserializeJson(currentTrackDoc, responseJson);
 
     currentTrack = currentTrackDoc["item"]["name"].as<String>();
+    currentArtist = currentTrackDoc["item"]["album"]["artists"][0]["name"].as<String>();
+
     progressSeconds = currentTrackDoc["progress_ms"].as<int>() / 1000;
     durationSeconds = currentTrackDoc["item"]["duration_ms"].as<int>() / 1000;
     progressMinutes = progressSeconds / 60;
@@ -161,19 +194,24 @@ void getCurrentTrack(String acessToken){
     remainderProgressSeconds = formatRemainder(progressSeconds);
     remainderDurationSeconds = formatRemainder(durationSeconds);
 
-    if(currentTrack != previousTrack){
-      tft.setCursor(0, 0, 2);
+    if(currentTrack != previousTrack && currentTrack != "null"){
+      tft.setTextColor(TFT_WHITE);  
+      tft.setCursor(0, 0, 4);
       tft.fillScreen(0x5AEB);
       tft.println(currentTrack);
+
+      tft.setTextColor(TFT_YELLOW);
+      tft.println(currentArtist);
+      
+      tft.setCursor(128, 192, 4);
+      tft.setTextColor(TFT_WHITE, TFT_BLACK);  
+      tft.println(String(durationMinutes) + ":" + remainderDurationSeconds);
+
       previousTrack = currentTrack;
     }
-    tft.setCursor(0, 96, 2);
+    tft.setCursor(0, 192, 4);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.println(String(progressMinutes) + ":" + remainderProgressSeconds);
-
-    tft.setCursor(64, 96, 2);
-    tft.println("/ "+String(durationMinutes) + ":" + remainderDurationSeconds);
-
-
   }
 }
 
@@ -186,6 +224,14 @@ void loop() {
   }
 
   if(!acessToken.isEmpty()){
+    tft.setTextSize(1);
     getCurrentTrack(acessToken);
+  }
+
+  if(!refreshToken.isEmpty()){
+    if(((millis()/1000) - lastTime) > expires-10){
+      getRefreshToken(refreshToken);
+      lastTime = millis()/1000;
+    }
   }
 }
