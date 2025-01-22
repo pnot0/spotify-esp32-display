@@ -1,20 +1,23 @@
-
-//essentials
+//essentials libs
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <WebSocketsServer.h>
 #include <HTTPClient.h>
+#include "SPIFFS.h"
 
 //user and webpage
 #include "index.h"
 #include "secrets.h"
 
-//graphics
+//image fetch and spiffs
+#include "list_spiffs.h"
+#include "web_fetch.h"
+
+//graphics libs
 #include <TFT_eSPI.h> 
 #include <SPI.h>
-
-//need to fork for git a specific version to upload so it doesnt include private shit
+#include <TJpg_Decoder.h>
 
 String code;
 String codeVerifier;
@@ -22,6 +25,7 @@ String codeVerifier;
 String previousTrack;
 String currentTrack;
 String currentArtist;
+String currentImageUrl;
 
 String remainderProgressSeconds;
 String remainderDurationSeconds;
@@ -39,6 +43,7 @@ unsigned long lastTime;
 WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
 HTTPClient http;
+
 TFT_eSPI tft = TFT_eSPI();
 
 //Static IP to be referenced in spotify callback
@@ -47,10 +52,19 @@ IPAddress localIP(192,168,15,3);
 //Gateway IP of you localnet
 IPAddress gateway(192,168,15,1);
 
-IPAddress subnet(255,255,0,0);
+IPAddress subnet(255,255,255,0);
 IPAddress primaryDNS(8,8,8,8);
+IPAddress secondaryDNS(1,1,1,1);
 
 String redirectUrl = "http%3A%2F%2F"+localIP.toString()+"%2F";
+
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+{
+  if ( y >= tft.height() ) return 0;
+  tft.pushImage(x, y, w, h, bitmap);
+  return 1;
+}
+
 
 void sendPage(){
   server.send(200, "text/html", INDEX);
@@ -80,11 +94,19 @@ void setup()
   tft.setTextSize(2);
 
   delay(10);
+  //Start SPIFFS
 
-  // We start by connecting to a WiFi network
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS initialisation failed!");
+    while (1) yield();
+  }
+  //Setting up for images
+  TJpgDec.setJpgScale(2);
+  TJpgDec.setSwapBytes(true);
+  TJpgDec.setCallback(tft_output);
 
   //Configure wifi
-  if (!WiFi.config(localIP, gateway, subnet, primaryDNS)) {
+  if (!WiFi.config(localIP, gateway, subnet, primaryDNS, secondaryDNS)) {
     Serial.println("STA Failed to configure");
   }
 
@@ -115,6 +137,9 @@ void setup()
   server.begin();
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
+
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
 }
 
 void getToken(){
@@ -132,12 +157,6 @@ void getToken(){
     acessToken = tokenDoc["access_token"].as<String>();
     refreshToken = tokenDoc["refresh_token"].as<String>();
     expires = tokenDoc["expires_in"].as<int>();
-
-    /*
-    Serial.println("token: " + tokenDoc["access_token"].as<String>());
-    Serial.println("refresh token: " + tokenDoc["refresh_token"].as<String>());
-    Serial.println("expiration: " + tokenDoc["expires_in"].as<String>());
-    */
   }
 }
 
@@ -167,6 +186,20 @@ String formatRemainder(int x){
   }
 }
 
+void loadImage(){
+  int count;
+  bool loaded_ok = getFile(currentImageUrl, "/IMG.jpg");
+  if(!loaded_ok){
+    if(count>4){
+      tft.setCursor(45,45,2);
+      tft.println("img fetch failed");
+    }
+    count++;
+    SPIFFS.remove("/IMG.jpg"); 
+    loadImage();
+  }
+}
+
 void getCurrentTrack(String acessToken){
   http.begin("https://api.spotify.com/v1/me/player/currently-playing");
   http.addHeader("Authorization","Bearer " + acessToken);
@@ -174,9 +207,10 @@ void getCurrentTrack(String acessToken){
   if(httpResponseCode>0 && httpResponseCode == 204){
     tft.setTextColor(TFT_RED);
     tft.setCursor(0,0,1);
+    tft.setTextSize(3);
     tft.fillScreen(0x5AEB);
-    Serial.println("no track is playing");
-    tft.println("no track is playing");
+    tft.println("no track is  playing");
+    delay(500);
   }
 
   if(httpResponseCode>0 && httpResponseCode == 200){
@@ -186,6 +220,7 @@ void getCurrentTrack(String acessToken){
 
     currentTrack = currentTrackDoc["item"]["name"].as<String>();
     currentArtist = currentTrackDoc["item"]["album"]["artists"][0]["name"].as<String>();
+    currentImageUrl = currentTrackDoc["item"]["album"]["images"][1]["url"].as<String>();
 
     progressSeconds = currentTrackDoc["progress_ms"].as<int>() / 1000;
     durationSeconds = currentTrackDoc["item"]["duration_ms"].as<int>() / 1000;
@@ -195,22 +230,33 @@ void getCurrentTrack(String acessToken){
     remainderDurationSeconds = formatRemainder(durationSeconds);
 
     if(currentTrack != previousTrack && currentTrack != "null"){
-      tft.setTextColor(TFT_WHITE);  
-      tft.setCursor(0, 0, 4);
+
       tft.fillScreen(0x5AEB);
+      tft.setTextColor(TFT_WHITE);  
+
+      tft.setCursor(45,45,2);
+      tft.println("loading...");
+      tft.drawRect(43,43,153,153,TFT_BLACK);
+      loadImage();
+      listSPIFFS();
+      TJpgDec.drawFsJpg(45, 45, "/IMG.jpg");
+      SPIFFS.remove("/IMG.jpg"); 
+
+      tft.setCursor(8, 8, 4);
       tft.println(currentTrack);
 
       tft.setTextColor(TFT_YELLOW);
       tft.println(currentArtist);
       
-      tft.setCursor(128, 192, 4);
+      tft.setCursor(160, 192, 4);
       tft.setTextColor(TFT_WHITE, TFT_BLACK);  
       tft.println(String(durationMinutes) + ":" + remainderDurationSeconds);
 
       previousTrack = currentTrack;
     }
-    tft.setCursor(0, 192, 4);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(16, 192, 4);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK); 
+    Serial.println("time update: " + String(progressMinutes) + ":" + remainderProgressSeconds);
     tft.println(String(progressMinutes) + ":" + remainderProgressSeconds);
   }
 }
