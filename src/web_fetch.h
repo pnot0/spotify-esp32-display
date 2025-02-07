@@ -13,16 +13,21 @@ bool getFile(String url, String filename) {
 
   Serial.print("[HTTP] begin...\n");
 
+  WiFiClientSecure client;
+  
+  client.setInsecure();
+  client.setTimeout(5);
+  client.setHandshakeTimeout(5);
+
   HTTPClient http;
-  // Configure server and url
-  http.setConnectTimeout(1500);
-  http.setTimeout(1500);
-  http.begin(url);
+  http.setConnectTimeout(5000);
+  http.setTimeout(7000);
+  http.begin(client, url);
 
   Serial.print("[HTTP] GET...\n");
   // Start connection and send HTTP header
   int httpCode = http.GET();
-  if (httpCode > 0 && httpCode == 200) {
+  if (httpCode > 0) {
     fs::File f = SPIFFS.open(filename, "w+");
     if (!f) {
       Serial.println("file open failed");
@@ -50,7 +55,7 @@ bool getFile(String url, String filename) {
         size_t size = stream->available();
 
         if (size) {
-          // Read up to 128 bytes
+          // Read up to buffer size
           int c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
 
           // Write it to file
@@ -72,8 +77,6 @@ bool getFile(String url, String filename) {
     Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
     return 0;
   }
-  http.resetCookieJar();
-  http.clearAllCookies();
   http.end();
   return 1; // File was fetched from web
 }

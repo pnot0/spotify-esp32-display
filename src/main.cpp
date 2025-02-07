@@ -35,6 +35,8 @@ int durationSeconds;
 int progressMinutes;
 int durationMinutes;
 
+int loadingFailCount;
+
 String acessToken;
 String refreshToken;
 int expires;
@@ -187,16 +189,22 @@ String formatRemainder(int x){
 }
 
 void loadImage(){
-  int count;
   bool loaded_ok = getFile(currentImageUrl, "/IMG.jpg");
-  if(!loaded_ok){
-    if(count>4){
+  if(!loaded_ok && currentTrack != previousTrack && currentTrack != "null"){
+    if(loadingFailCount == 4){
+      tft.setTextColor(TFT_RED, 0x5AEB);
       tft.setCursor(45,45,2);
       tft.println("img fetch failed");
+      tft.setTextColor(TFT_WHITE);
+    }else{
+      loadingFailCount++;
+      SPIFFS.remove("/IMG.jpg"); 
+      loadImage();
     }
-    count++;
-    SPIFFS.remove("/IMG.jpg"); 
-    loadImage();
+    delay(1000 * loadingFailCount); 
+  }else{
+    loadingFailCount = 0;
+    tft.fillScreen(0x5AEB);
   }
 }
 
@@ -232,17 +240,24 @@ void getCurrentTrack(String acessToken){
     if(currentTrack != previousTrack && currentTrack != "null"){
 
       tft.fillScreen(0x5AEB);
-      tft.setTextColor(TFT_WHITE);  
+      tft.setTextColor(TFT_WHITE);
+
+      tft.setCursor(4, 4, 4);
+      tft.println(currentTrack);
+
+      tft.setTextColor(TFT_YELLOW);
+      tft.println(currentArtist);  
 
       tft.setCursor(45,45,2);
       tft.println("loading...");
       tft.drawRect(43,43,153,153,TFT_BLACK);
       loadImage();
       listSPIFFS();
+      tft.setTextColor(TFT_WHITE);
       TJpgDec.drawFsJpg(45, 45, "/IMG.jpg");
       SPIFFS.remove("/IMG.jpg"); 
 
-      tft.setCursor(8, 8, 4);
+      tft.setCursor(4, 4, 4);
       tft.println(currentTrack);
 
       tft.setTextColor(TFT_YELLOW);
@@ -256,7 +271,6 @@ void getCurrentTrack(String acessToken){
     }
     tft.setCursor(16, 192, 4);
     tft.setTextColor(TFT_WHITE, TFT_BLACK); 
-    Serial.println("time update: " + String(progressMinutes) + ":" + remainderProgressSeconds);
     tft.println(String(progressMinutes) + ":" + remainderProgressSeconds);
   }
 }
